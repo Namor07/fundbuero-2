@@ -1,82 +1,78 @@
 # =========================================
-# Fundbüro-KI – YOLOv8 (neu)
+# Fundbüro-KI mit YOLOv5
 # Schul- & Lernprojekt
 # =========================================
 
 import streamlit as st
-from ultralytics import YOLO
-from PIL import Image
+import torch
 import numpy as np
+from PIL import Image
 
 # -------------------------------
 # Seiteneinstellungen
 # -------------------------------
 st.set_page_config(
-    page_title="Fundbüro-KI",
+    page_title="Fundbüro-KI (YOLOv5)",
     page_icon="🧳",
     layout="centered"
 )
 
 st.title("🧳 Fundbüro-KI")
-st.write("Lade ein Bild eines gefundenen Gegenstands hoch.")
+st.write("Erkennung gefundener Gegenstände mit YOLOv5")
 
 # -------------------------------
-# YOLOv8 Modell laden (neueste Generation)
+# YOLOv5 Modell laden
 # -------------------------------
 @st.cache_resource
 def lade_modell():
-    # YOLOv8n = aktuell, klein, stabil
-    return YOLO("yolov8n.pt")
+    # YOLOv5s = klein, schnell, stabil
+    modell = torch.hub.load(
+        "ultralytics/yolov5",
+        "yolov5s",
+        pretrained=True
+    )
+    return modell
 
 modell = lade_modell()
 
 # -------------------------------
 # Bild-Upload
 # -------------------------------
-bild_datei = st.file_uploader(
-    "📷 Bild auswählen",
+datei = st.file_uploader(
+    "📷 Bild hochladen",
     type=["jpg", "jpeg", "png"]
 )
 
-if bild_datei is not None:
-    # Bild laden
-    bild = Image.open(bild_datei).convert("RGB")
+if datei:
+    bild = Image.open(datei).convert("RGB")
     bild_np = np.array(bild)
 
     st.subheader("🖼️ Originalbild")
     st.image(bild, use_container_width=True)
 
     # -------------------------------
-    # YOLO-Erkennung
+    # YOLOv5 Erkennung
     # -------------------------------
-    ergebnisse = modell.predict(
-        source=bild_np,
-        conf=0.25,
-        save=False
-    )
-
-    result = ergebnisse[0]
+    ergebnisse = modell(bild_np)
 
     # Annotiertes Bild
-    annotiert = result.plot()
+    annotiertes_bild = ergebnisse.render()[0]
 
     st.subheader("📦 Erkannte Gegenstände")
-    st.image(annotiert, use_container_width=True)
+    st.image(annotiertes_bild, use_container_width=True)
 
     # -------------------------------
     # Ergebnisliste
     # -------------------------------
-    st.subheader("📋 Ergebnisse")
+    st.subheader("📋 Erkennungsergebnisse")
 
-    if result.boxes is None or len(result.boxes) == 0:
+    daten = ergebnisse.pandas().xyxy[0]
+
+    if daten.empty:
         st.info("Keine Gegenstände erkannt.")
     else:
-        for box in result.boxes:
-            klasse_id = int(box.cls[0])
-            klasse_name = result.names[klasse_id]
-            sicherheit = float(box.conf[0])
-
+        for _, zeile in daten.iterrows():
             st.write(
-                f"**Objekt:** {klasse_name}  \n"
-                f"**Erkennungswahrscheinlichkeit:** {sicherheit:.1%}"
+                f"**Objekt:** {zeile['name']}  \n"
+                f"**Erkennungswahrscheinlichkeit:** {zeile['confidence']:.1%}"
             )
